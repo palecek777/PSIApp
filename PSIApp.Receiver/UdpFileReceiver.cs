@@ -24,7 +24,12 @@ namespace PSIApp
         private bool _is_transfering;
         private bool _is_connected;
 
-        private DataPacket[] _packets;
+        private uint ReceivedCount { get; set; }
+        private DataPacket[] ReceivedPackets { get; set; }
+        private uint AwaitedPacketNum { get; set; }
+        private string FileName { get; set; }
+        private uint TotalPacketCount { get; set; }
+
 
         public SmartUdpClient Client
         {
@@ -127,39 +132,39 @@ namespace PSIApp
                 return;
             }
 
-            if(IsTransfering && MessageConstructor.IsFileData(e.Data))
+            if (IsTransfering && MessageConstructor.IsFileData(e.Data))
             {
                 ReceivePacket(MessageConstructor.GetPacket(e.Data));
                 return;
             }
 
-            if(MessageConstructor.IsFileMeta(e.Data))
+            if (MessageConstructor.IsFileMeta(e.Data))
             {
-                total_packet_count = BitConverter.ToUInt32(e.Data, 1 + sizeof(long));
+                TotalPacketCount = BitConverter.ToUInt32(e.Data, 1 + sizeof(long));
 
 
                 string fn = Encoding.ASCII.GetString(e.Data, 1 + sizeof(long) + sizeof(uint), e.Data.Length - 1 - sizeof(long) - sizeof(uint) - sizeof(uint));
                 PrepareFile(fn);
 
-                _packets = new DataPacket[total_packet_count];
+                ReceivedPackets = new DataPacket[TotalPacketCount];
 
-                Console.WriteLine($"Receiving file '{fn}', total of {total_packet_count} packets.");
-                WriteStatus(0, total_packet_count, false);
+                Console.WriteLine($"Receiving file '{fn}', total of {TotalPacketCount} packets.");
+                WriteStatus(0, TotalPacketCount, false);
                 Client.Send(e.Data, e.Data.Length);
             }
 
             if (IsTransfering && MessageConstructor.IsFileEnd(e.Data))
             {
 
-                //WriteFile();
+                WriteFile();
 
                 uint hash = BitConverter.ToUInt32(e.Data, 1);
 
-                uint computed = MessageConstructor.GetFileHash(file_name);
+                uint computed = MessageConstructor.GetFileHash(FileName);
 
-                if (hash == computed || true)
+                if (hash == computed)
                 {
-                    FileReceived?.Invoke(this, new FileReceivedEventArgs() { FileName = file_name });
+                    FileReceived?.Invoke(this, new FileReceivedEventArgs() { FileName = FileName });
                     _is_transfering = false;
                 }
                 else
@@ -170,7 +175,6 @@ namespace PSIApp
             }
         }
 
-        uint total_packet_count;
 
         //pripoji Clienta na adresu receivera
         private void Connect(uint length, uint count, IPEndPoint ip)
@@ -183,60 +187,90 @@ namespace PSIApp
 
             _is_connected = true;
             Connected?.Invoke(this, new EventArgs());
-            
+
         }
 
-        private uint aw_packet = 0;
-        string file_name;
 
-        Dictionary<uint, DataPacket> received_packets;
+        //Dictionary<uint, DataPacket> received_packets;
+        //DataPacket[] packets;
         private void ReceivePacket(DataPacket packet)
         {
-            //je to packet, ktery ocekavam
-            if (packet.Number == aw_packet)// && !(aw_packet > total_packet_count))
-            {
-                WriteData(packet);
-                //WriteStatus(packet.Number, total_packet_count);
-                aw_packet++;
+            ////je to packet, ktery ocekavam
+            //if (packet.Number == aw_packet)// && !(aw_packet > total_packet_count))
+            //{
+            //    WriteData(packet);
+            //    //WriteStatus(packet.Number, total_packet_count);
+            //    aw_packet++;
 
-                while (received_packets.Count > 0 && received_packets.Keys.Contains(aw_packet))
-                {
-                    WriteData(received_packets[aw_packet]);
-                    received_packets.Remove(aw_packet);
-                    aw_packet++;
-                }
+            //    while (received_packets.Count > 0 && received_packets.Keys.Contains(aw_packet))
+            //    {
+            //        WriteData(received_packets[aw_packet]);
+            //        received_packets.Remove(aw_packet);
+            //        aw_packet++;
+            //    }
+            //}
+            ////je to packet, ktery nyni necekam, dam si ho do ordered listu
+            //else
+            //{
+            //    received_packets[packet.Number] = packet;
+            //}
+
+            ////if (packet.Number < total_packet_count)
+            ////    _packets[packet.Number] = packet;
+
+            //try
+            //{
+            //    _packets[packet.Number] = packet;
+            //}
+            //catch
+            //{
+            //    Console.WriteLine("Invalid packet number");
+            //}
+
+            if (ReceivedPackets[packet.Number] is null)
+            {
+                ReceivedPackets[packet.Number] = packet;
             }
-            //je to packet, ktery nyni necekam, dam si ho do ordered listu
             else
             {
-                received_packets[packet.Number] = packet;
+                return;
             }
 
-            //if (packet.Number < total_packet_count)
-            //    _packets[packet.Number] = packet;
-            
+            UpdateAwaitedNum();
 
-            byte[] resp = MessageConstructor.GetDataReceived(aw_packet);
+            WriteStatus(AwaitedPacketNum, TotalPacketCount);
+
+            byte[] resp = MessageConstructor.GetDataReceived(packet.Number, AwaitedPacketNum);
             Client.Send(resp, resp.Length);
+        }
+
+        private void UpdateAwaitedNum()
+        {
+            while(AwaitedPacketNum < TotalPacketCount && ReceivedPackets[AwaitedPacketNum] != null)
+            {
+                AwaitedPacketNum++;
+            }
         }
 
         private void PrepareFile(string filename)
         {
-            received_packets = new Dictionary<uint, DataPacket>();
+            //ReceivedPackets = new DataPacket[TotalPacketCount];
             File.Create(filename).Close();
-            file_name = filename;
-            aw_packet = 0;
+            FileName = filename;
+            AwaitedPacketNum = 0;
             _is_transfering = true;
         }
 
         Mutex file_mutex;
         private void WriteData(DataPacket packet)
         {
+            return;
+
             file_mutex.WaitOne();
-            //WriteStatus(packet.Number, total_packet_count);
-            using (BinaryWriter writer = new BinaryWriter(File.Open(file_name, FileMode.Append, FileAccess.Write)))
+            WriteStatus(packet.Number, TotalPacketCount);
+            using (BinaryWriter writer = new BinaryWriter(File.Open(FileName, FileMode.Append, FileAccess.Write)))
             {
-                writer.Write(packet.Data, 1 + sizeof(uint) + sizeof(uint), packet.Data.Length - 1 - sizeof(uint) - sizeof(uint) - sizeof(uint));
+                writer.Write(packet.Data, DataPacket.DataOffset, packet.DataLength);
             }
             file_mutex.ReleaseMutex();
         }
@@ -244,12 +278,12 @@ namespace PSIApp
         private void WriteFile()
         {
             file_mutex.WaitOne();
-            using (BinaryWriter writer = new BinaryWriter(File.Open(file_name, FileMode.Append, FileAccess.Write)))
+            using (BinaryWriter writer = new BinaryWriter(File.Open(FileName, FileMode.Append, FileAccess.Write)))
             {
-                for(long i = 0; i < _packets.LongLength; ++i)
+                for (int i = 0; i < ReceivedPackets.Length; ++i)
                 {
-                    _packets[i].AckCount++;
-                    writer.Write(_packets[i].Data, 1 + sizeof(uint) + sizeof(uint), _packets[i].Data.Length - 1 - sizeof(uint) - sizeof(uint) - sizeof(uint));
+                    ReceivedPackets[i].AckCount++;
+                    writer.Write(ReceivedPackets[i].Data, 1 + sizeof(uint) + sizeof(uint), ReceivedPackets[i].Data.Length - 1 - sizeof(uint) - sizeof(uint) - sizeof(uint));
                 }
             }
             file_mutex.ReleaseMutex();

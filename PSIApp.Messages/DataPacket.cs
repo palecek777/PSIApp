@@ -9,6 +9,11 @@ namespace PSIApp
 {
     public class DataPacket
     {
+        //const byte FileData = 2; // [FileData, [Packet # - 4B]], [Data Length - 4B], [Data - ...], [CRC/Hash... - 4B]
+
+        public const int DataOffset = sizeof(byte) + sizeof(uint) + sizeof(uint);
+        public const int MiscLength = DataOffset + sizeof(uint);
+
         // v ms
         const double TimeoutInterval = 10000;
 
@@ -17,6 +22,8 @@ namespace PSIApp
 
         // obsah packetu
         public byte[] Data { get; set; }
+
+        public int DataLength { get; set; }
 
         // pocet neprijeti od receivera
         // pokud prekroci magickou hranici 3 - posle se znovu i kdyz nebude timeout

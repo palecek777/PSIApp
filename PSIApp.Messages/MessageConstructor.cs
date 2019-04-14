@@ -19,15 +19,15 @@ namespace PSIApp
         const byte FileData = 2; // [FileData, [Packet # - 4B]], [Data Length - 4B], [Data - ...], [CRC/Hash... - 4B]
         const byte FileEnd = 3; // [FileEnd, [Hash - 4B], [CRC/Hash... - 4B]
         const byte ConnectionEnd = 4; // [ConnectionEnd, [CRC/Hash... - 4B]
-        const byte DataReceived = 5; // [DataReceived, [Packet # 4B], [CRC/Hash... - 4B]
+        const byte DataReceived = 5; // [DataReceived, [RecPacket # 4B], [AwPacket # 4B], [CRC/Hash... - 4B]
 
         // otestuje hodnotu Type bytu
-        public static bool IsHandshake(byte[] msg) {  return msg[0] == Handshake; }
-        public static bool IsFileMeta(byte[] msg) {  return msg[0] == FileMeta; }
+        public static bool IsHandshake(byte[] msg) { return msg[0] == Handshake; }
+        public static bool IsFileMeta(byte[] msg) { return msg[0] == FileMeta; }
         public static bool IsFileData(byte[] msg) { return msg[0] == FileData; }
-        public static bool IsFileEnd(byte[] msg) {  return msg[0] == FileEnd; }
-        public static bool IsConnectionEnd(byte[] msg) {  return msg[0] == ConnectionEnd; }
-        public static bool IsDataReceived(byte[] msg) {  return msg[0] == DataReceived; }
+        public static bool IsFileEnd(byte[] msg) { return msg[0] == FileEnd; }
+        public static bool IsConnectionEnd(byte[] msg) { return msg[0] == ConnectionEnd; }
+        public static bool IsDataReceived(byte[] msg) { return msg[0] == DataReceived; }
 
         static uint ComputeCrc(byte[] data)
         {
@@ -92,24 +92,32 @@ namespace PSIApp
 
             return message;
         }
-        
-        public static byte[] GetFileData(uint packet_number, byte[] data)
+
+        public static byte[] GetFileData(uint packet_number, byte[] data, uint data_length)
         {
             byte[] message = new byte[1 +               // msg type         - byte (char)
                                       sizeof(uint) +    // packet number    - uint
                                       sizeof(uint) +    // data length      - uint
-                                      data.Length +     // data             - byte[] (char[])  
+                                      data_length +     // data             - byte[] (char[])  
                                       sizeof(uint)      // CRC              - uint
                                       ];
 
             message[0] = FileData;
             BitConverter.GetBytes(packet_number).CopyTo(message, 1);
-            BitConverter.GetBytes((uint)data.Length).CopyTo(message, 1 + sizeof(uint));
-            data.CopyTo(message, 1 + sizeof(uint) + sizeof(uint));
-            BitConverter.GetBytes(ComputeCrc(message)).CopyTo(message, 1 + sizeof(uint) + sizeof(uint) + data.Length);
+            BitConverter.GetBytes(data_length).CopyTo(message, 1 + sizeof(uint));
+            for (uint i = 0; i < data_length; ++i)
+                message[DataPacket.DataOffset + i] = data[i];
+            //data.CopyTo(message, 1 + sizeof(uint) + sizeof(uint));
+            BitConverter.GetBytes(ComputeCrc(message)).CopyTo(message, 1 + sizeof(uint) + sizeof(uint) + data_length);
+
+            if (packet_number >= 619)
+            {
+
+            }
+
             return message;
         }
-        
+
         public static byte[] GetFileEnd(uint hash)
         {
             byte[] message = new byte[1 +               // msg type         - byte (char)
@@ -118,11 +126,11 @@ namespace PSIApp
                                       ];
 
             message[0] = FileEnd;
-            BitConverter.GetBytes(hash).CopyTo(message, 1);            
+            BitConverter.GetBytes(hash).CopyTo(message, 1);
             BitConverter.GetBytes(ComputeCrc(message)).CopyTo(message, 1 + sizeof(uint));
             return message;
         }
-        
+
         public static byte[] GetConnectioNEnd()
         {
             byte[] message = new byte[1 + sizeof(uint)];
@@ -131,12 +139,13 @@ namespace PSIApp
             return message;
         }
 
-        public static byte[] GetDataReceived(uint packet)
+        public static byte[] GetDataReceived(uint rec_packet, uint aw_packet)
         {
-            byte[] message = new byte[1 + sizeof(uint) + sizeof(uint)];
+            byte[] message = new byte[1 + sizeof(uint) + sizeof(uint) + sizeof(uint)];
             message[0] = DataReceived;
-            BitConverter.GetBytes(packet).CopyTo(message, 1);
-            BitConverter.GetBytes(ComputeCrc(message)).CopyTo(message, 1 + sizeof(int));
+            BitConverter.GetBytes(rec_packet).CopyTo(message, 1);
+            BitConverter.GetBytes(aw_packet).CopyTo(message, 1 + sizeof(uint));
+            BitConverter.GetBytes(ComputeCrc(message)).CopyTo(message, 1 + sizeof(uint) + sizeof(uint));
             return message;
         }
 
@@ -145,6 +154,7 @@ namespace PSIApp
             DataPacket packet = new DataPacket();
             packet.Data = message;
             packet.Number = BitConverter.ToUInt32(message, 1);
+            packet.DataLength = (int)BitConverter.ToUInt32(message, 1 + sizeof(uint));
 
             return packet;
         }

@@ -165,7 +165,7 @@ namespace PSIApp
 
 
                 _packets = new DataPacket[MaxPackets];
-                for(int i = 0; i < MaxPackets; ++i)
+                for (int i = 0; i < MaxPackets; ++i)
                 {
                     _packets[i] = new DataPacket();
                     _packets[i].Timeout += OnPacketTimeout;
@@ -175,7 +175,7 @@ namespace PSIApp
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Error during connection to '{Target}': {e.Message}");                
+                Console.WriteLine($"Error during connection to '{Target}': {e.Message}");
             }
         }
 
@@ -238,12 +238,12 @@ namespace PSIApp
 
             if (MessageConstructor.IsDataReceived(e.Data))
             {
-                uint packet_num = BitConverter.ToUInt32(e.Data, 1);
+                uint rc_packet_num = BitConverter.ToUInt32(e.Data, 1);
+                uint aw_packet_num = BitConverter.ToUInt32(e.Data, 1 + sizeof(uint));
 
-                bool is_pending = false;
 
                 PacketsMutex.WaitOne();
-                for(int i = 0; i < MaxPackets; ++i)
+                for (int i = 0; i < MaxPackets; ++i)
                 {
                     if (Packets[i].AckCount == -1)
                         continue;
@@ -255,27 +255,21 @@ namespace PSIApp
                     //    AckPackets.Add(i);
                     //}
 
-                    if (Packets[i].Number < packet_num)
+                    if (Packets[i].Number == rc_packet_num)
                     {
                         Packets[i].OnReceive();
-                        packet_num--;
+                        //rc_packet_num--;
                         AckPackets.Add(i);
-                        ack_count++;
+                        DeliveredPacketCount++;
                     }
-                    else if (Packets[i].Number == packet_num)
+                    if (Packets[i].Number == aw_packet_num)
                     {
                         Packets[i].AckCount++;
                         if (Packets[i].AckCount >= 3)
                         {
                             Client.SendPacket(Packets[i]);
                         }
-                        is_pending = true;
                     }
-                }
-
-                if (!is_pending)
-                {
-
                 }
 
                 PacketsMutex.ReleaseMutex();
@@ -288,22 +282,24 @@ namespace PSIApp
                 meta_response = e.Data;
                 return;
             }
-            
+
         }
 
         //spusti posilani souboru
         byte[] meta_response = null;
-        uint ack_count = 0;
-        uint last_ack = 0;
+        private uint DeliveredPacketCount { get; set; }
+        //uint last_ack = 0;
         public void SendFile(string path)
         {
-            ack_count = 0;
+            DeliveredPacketCount = 0;
             _is_transfering = true;
             string file_name = Path.GetFileName(path);
 
+            int buffer_size = (int)MaxPacketLength - DataPacket.MiscLength;
+
             // poslu FileMeta msg a pockam na odpoved - Handshake se stejnymi hodnotami
             FileInfo finfo = new FileInfo(path);
-            uint pack_cnt = (uint) (finfo.Length / MaxPacketLength + (finfo.Length % MaxPacketLength > 0 ? 1 : 0));
+            uint pack_cnt = (uint)(finfo.Length / buffer_size + (finfo.Length % buffer_size > 0 ? 1 : 0));
 
             //zkratit file_name, aby se veslo do maximalni delky packetu
             if (file_name.Length > (MaxPacketLength - sizeof(byte) - sizeof(long) - sizeof(int) - sizeof(uint)))
@@ -314,7 +310,7 @@ namespace PSIApp
             byte[] msg = MessageConstructor.GetFileMeta(finfo.Length, pack_cnt, file_name);
             Client.Send(msg, msg.Length);
 
-            while(meta_response == null)
+            while (meta_response == null)
             { }
 
             if (!Extensions.AreSameArrays(msg, meta_response))
@@ -333,23 +329,29 @@ namespace PSIApp
             for (int i = 0; i < MaxPackets; ++i) AckPackets.Add(i);
 
 
-            int buffer_size = (int) MaxPacketLength - //packet length
-                              1 -               //packet type
-                              sizeof(uint) -     //number of packet
-                              sizeof(uint) -     //data length
-                              sizeof(uint);     //CRC
+            //int buffer_size = (int)MaxPacketLength - //packet length
+            //                  1 -               //packet type
+            //                  sizeof(uint) -     //number of packet
+            //                  sizeof(uint) -     //data length
+            //                  sizeof(uint);     //CRC
+
 
             //indkuje, ze je potreba zrusit nejaky cyclus, pouziti ruzne
             bool break_cycle;
 
-            WriteStatus(ack_count, pack_cnt, false);
+            WriteStatus(DeliveredPacketCount, pack_cnt, false);
 
             using (BinaryReader reader = new BinaryReader(File.Open(path, FileMode.Open, FileAccess.Read)))
             {
                 byte[] read_buffer = new byte[buffer_size];
                 while (reader.BaseStream.Position != reader.BaseStream.Length)
                 {
-                    reader.Read(read_buffer, 0, buffer_size);
+                    int act_count = reader.Read(read_buffer, 0, buffer_size);
+
+                    if (act_count < 0)
+                    {
+
+                    }
 
                     // cekam na volny packet
                     int idx;
@@ -370,7 +372,7 @@ namespace PSIApp
                     // nemelo by byt potreba nastavovat PacketMutext, protoze jina vlakna by v tento moment nemela pristupovat k datum ktera chci upravovat
                     //PacketsMutex.WaitOne();
 
-                    Packets[idx].Data = MessageConstructor.GetFileData(packet_num, read_buffer);
+                    Packets[idx].Data = MessageConstructor.GetFileData(packet_num, read_buffer, (uint)act_count);
                     Packets[idx].Number = packet_num;
                     Packets[idx].AckCount = 0;
 
@@ -381,21 +383,19 @@ namespace PSIApp
                     //zvysuji cislo packetu
                     packet_num++;
 
-                    if (packet_num % 2 == 0)
-                    {
-                        WriteStatus(ack_count, pack_cnt);
-                    }
+                    WriteStatus(DeliveredPacketCount, pack_cnt);
                 }
             }
 
             //v tento moment jsou vsechnz packety dorucene ci na ceste, cekam na ack vsech prave posilanych
-            
+
             while (true)
             {
                 PacketsMutex.WaitOne();
                 // tedy vsechny packety jsou volne
                 break_cycle = AckPackets.Count >= MaxPackets;
                 PacketsMutex.ReleaseMutex();
+                WriteStatus(DeliveredPacketCount, pack_cnt);
                 if (break_cycle) break;
                 Thread.Sleep(20);
             }
@@ -423,7 +423,7 @@ namespace PSIApp
             Console.Write("[{0,6}/{1,6}] : ", value, target);
             double perc = (double)value / (double)target;
 
-            for (int i = 0; i < (width - 30)* perc; ++i)
+            for (int i = 0; i < (width - 30) * perc; ++i)
                 Console.Write("#");
 
             Console.WriteLine(" {0} %", (int)(perc * 100));
