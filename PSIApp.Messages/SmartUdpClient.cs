@@ -69,12 +69,12 @@ namespace PSIApp
         }
 
         //posle jeden packet pomoci klienta
-        public void SendPacket(DataPacket packet)
+        public void SendPacket(DataPacket packet, IPEndPoint ip)
         {
             // Mutex - thread safety 
             Mutex.WaitOne();
             // posilam data
-            Send(packet.Data, packet.Data.Length);
+            Send(packet.Data, packet.Data.Length, ip);
             packet.OnSend();
             Mutex.ReleaseMutex();
 

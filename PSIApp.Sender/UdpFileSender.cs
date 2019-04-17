@@ -29,7 +29,7 @@ namespace PSIApp
 
         private bool _is_transfering = false;
         private bool _is_connected = false;
-        private bool _stop_and_go = false;
+        private bool _stop_and_wait = false;
 
         private Mutex ClientMutex { get; set; }
         private Mutex PacketsMutex { get; set; }
@@ -39,7 +39,7 @@ namespace PSIApp
 
         public bool StopAndWait
         {
-            get { return _stop_and_go; }
+            get { return _stop_and_wait; }
         }
 
         //posilame prave ted neco?
@@ -138,10 +138,10 @@ namespace PSIApp
             _is_connected = false;
             try
             {
-                Client.Connect(Target);
+                //Client.Connect(Target);
                 // navrhnu svoje hodnoty delky packetu a poctu packetu
                 byte[] message = MessageConstructor.GetHandshake(MaxPacketLength, MaxPackets);
-                Client.Send(message, message.Length);
+                Client.Send(message, message.Length, Target);
 
                 DateTime milis = DateTime.Now;
                 // handske timeout
@@ -168,7 +168,7 @@ namespace PSIApp
                 MaxPacketLength = Math.Min(MaxPacketLength, BitConverter.ToUInt32(handshake_response, 1));
                 MaxPackets = Math.Min(MaxPackets, BitConverter.ToUInt32(handshake_response, 1 + sizeof(int)));
 
-                _stop_and_go = MaxPackets == 1;
+                _stop_and_wait = MaxPackets == 1;
 
                 handshake_response = null;
 
@@ -207,7 +207,7 @@ namespace PSIApp
         private void OnPacketTimeout(object sender, EventArgs e)
         {
             DataPacket packet = (DataPacket)sender;
-            Client.SendPacket(packet);
+            Client.SendPacket(packet, Target);
         }
 
         //korektne ukonci komunikcaci s receiverem
@@ -260,7 +260,7 @@ namespace PSIApp
                 {
                     // rezim stop and go => pouze jeden packet na ceste a prijemce prijal chybnou zpravu
                     // posli znova packet
-                    Client.SendPacket(Packets[0]);
+                    Client.SendPacket(Packets[0], Target);
                     return;
                 }
 
@@ -289,7 +289,7 @@ namespace PSIApp
                         Packets[i].AckCount++;
                         if (Packets[i].AckCount >= 3)
                         {
-                            Client.SendPacket(Packets[i]);
+                            Client.SendPacket(Packets[i], Target);
                         }
                     }
                 }
@@ -330,7 +330,7 @@ namespace PSIApp
             }
 
             byte[] msg = MessageConstructor.GetFileMeta(finfo.Length, pack_cnt, file_name);
-            Client.Send(msg, msg.Length);
+            Client.Send(msg, msg.Length, Target);
 
             while (meta_response == null)
             { }
@@ -400,7 +400,7 @@ namespace PSIApp
 
                     //PacketsMutex.ReleaseMutex();
 
-                    Client.SendPacket(Packets[idx]);
+                    Client.SendPacket(Packets[idx], Target);
 
                     //zvysuji cislo packetu
                     packet_num++;
@@ -425,7 +425,7 @@ namespace PSIApp
             // poslu FileEnd msg
             //TODO: vypocet File hash
             byte[] file_end = MessageConstructor.GetFileEnd(MessageConstructor.GetFileHash(file_name));
-            Client.Send(file_end, file_end.Length);
+            Client.Send(file_end, file_end.Length, Target);
 
             // jine vlakno prijme reakci na file_end message a pokud to nebude uspokojiva odpoved, zopakuje zaslani...
         }

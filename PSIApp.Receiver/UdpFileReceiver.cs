@@ -30,11 +30,11 @@ namespace PSIApp
         private string FileName { get; set; }
         private uint TotalPacketCount { get; set; }
 
-        private bool _stop_and_go;
+        private bool _stop_and_wait;
 
         public bool StopAndWait
         {
-            get { return _stop_and_go; }
+            get { return _stop_and_wait; }
         }
 
         public IPEndPoint Target
@@ -98,6 +98,7 @@ namespace PSIApp
                 }
             }
         }
+
 
         public UdpFileReceiver()
         {
@@ -200,7 +201,7 @@ namespace PSIApp
             MaxPackets = Math.Min(MaxPackets, count);
             MaxPacketLength = Math.Min(MaxPacketLength, length);
 
-            _stop_and_go = MaxPackets == 1;
+            _stop_and_wait = MaxPackets == 1;
             
 
             byte[] message = MessageConstructor.GetHandshake(MaxPacketLength, MaxPackets);
