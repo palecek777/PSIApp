@@ -110,10 +110,10 @@ namespace PSIApp
             //data.CopyTo(message, 1 + sizeof(uint) + sizeof(uint));
             BitConverter.GetBytes(ComputeCrc(message)).CopyTo(message, 1 + sizeof(uint) + sizeof(uint) + data_length);
 
-            if (packet_number >= 619)
-            {
+            //if (packet_number >= 619)
+            //{
 
-            }
+            //}
 
             return message;
         }
@@ -131,7 +131,7 @@ namespace PSIApp
             return message;
         }
 
-        public static byte[] GetConnectioNEnd()
+        public static byte[] GetConnectionEnd()
         {
             byte[] message = new byte[1 + sizeof(uint)];
             message[0] = ConnectionEnd;

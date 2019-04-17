@@ -30,6 +30,17 @@ namespace PSIApp
         private string FileName { get; set; }
         private uint TotalPacketCount { get; set; }
 
+        private bool _stop_and_go;
+
+        public bool StopAndWait
+        {
+            get { return _stop_and_go; }
+        }
+
+        public IPEndPoint Target
+        {
+            get { return _target; }
+        }
 
         public SmartUdpClient Client
         {
@@ -123,6 +134,12 @@ namespace PSIApp
         {
             if (!MessageConstructor.ValidateMessage(e.Data))
             {
+                if(StopAndWait)
+                {
+                    byte[] msg = MessageConstructor.GetDataReceived(uint.MinValue, uint.MaxValue);
+                    Client.Send(msg, msg.Length);
+                }
+
                 return;
             }
 
@@ -179,8 +196,13 @@ namespace PSIApp
         //pripoji Clienta na adresu receivera
         private void Connect(uint length, uint count, IPEndPoint ip)
         {
+            _target = ip;
             MaxPackets = Math.Min(MaxPackets, count);
             MaxPacketLength = Math.Min(MaxPacketLength, length);
+
+            _stop_and_go = MaxPackets == 1;
+            
+
             byte[] message = MessageConstructor.GetHandshake(MaxPacketLength, MaxPackets);
             Client.Connect(ip);
             Client.Send(message, message.Length);

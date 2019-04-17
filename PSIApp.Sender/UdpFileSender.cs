@@ -17,6 +17,7 @@ namespace PSIApp
     {
         public const uint DefaultPacketLength = 6000;
         public const uint DefaultPacketCount = 32;
+        public const long HandshakeTimeout = 2000;
 
 
         private SmartUdpClient _client;
@@ -28,12 +29,18 @@ namespace PSIApp
 
         private bool _is_transfering = false;
         private bool _is_connected = false;
+        private bool _stop_and_go = false;
 
         private Mutex ClientMutex { get; set; }
         private Mutex PacketsMutex { get; set; }
         private HashSet<int> AckPackets { get; set; }
 
         private DataPacket[] _packets;
+
+        public bool StopAndWait
+        {
+            get { return _stop_and_go; }
+        }
 
         //posilame prave ted neco?
         public bool IsTransfering
@@ -136,9 +143,15 @@ namespace PSIApp
                 byte[] message = MessageConstructor.GetHandshake(MaxPacketLength, MaxPackets);
                 Client.Send(message, message.Length);
 
-                while (handshake_response == null)
-                { }
+                DateTime milis = DateTime.Now;
+                // handske timeout
                 //TODO pridat nejaky timeout na handshake
+                while (handshake_response == null || (DateTime.Now.Ticks - milis.Ticks) < HandshakeTimeout)
+                { }
+                if (handshake_response == null)
+                {
+                    throw new Exception("Handshake Timeout");
+                }
 
                 //if (MessageConstructor.ValidateMessage(handshake_response) &&  MessageConstructor.IsHandshake(handshake_response))
                 //{
@@ -154,6 +167,8 @@ namespace PSIApp
 
                 MaxPacketLength = Math.Min(MaxPacketLength, BitConverter.ToUInt32(handshake_response, 1));
                 MaxPackets = Math.Min(MaxPackets, BitConverter.ToUInt32(handshake_response, 1 + sizeof(int)));
+
+                _stop_and_go = MaxPackets == 1;
 
                 handshake_response = null;
 
@@ -241,6 +256,13 @@ namespace PSIApp
                 uint rc_packet_num = BitConverter.ToUInt32(e.Data, 1);
                 uint aw_packet_num = BitConverter.ToUInt32(e.Data, 1 + sizeof(uint));
 
+                if (StopAndWait && rc_packet_num == UInt32.MinValue && aw_packet_num == UInt32.MaxValue)
+                {
+                    // rezim stop and go => pouze jeden packet na ceste a prijemce prijal chybnou zpravu
+                    // posli znova packet
+                    Client.SendPacket(Packets[0]);
+                    return;
+                }
 
                 PacketsMutex.WaitOne();
                 for (int i = 0; i < MaxPackets; ++i)
