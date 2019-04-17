@@ -9,41 +9,52 @@ using System.Threading.Tasks;
 
 namespace PSIApp
 {
-    public class SmartUdpClient : UdpClient
+    public class SmartUdpClient : IDisposable// : UdpClient
     {
         protected Mutex Mutex {get;set;}
         protected System.Timers.Timer PoolingTimer { get; set; }
 
+        protected UdpClient Client { get; set; }
+
         const double PoolingInterval = 2;
+
+        public double ErrorRate = -1.0;
+        public double DropRate = -1.0;
 
         #region Construction
         public SmartUdpClient()
         {
+            Client = new UdpClient();
             Init();
         }
 
-        public SmartUdpClient(AddressFamily family) : base(family)
+        public SmartUdpClient(AddressFamily family)// : base(family)
         {
+            Client = new UdpClient(family);
             Init();
         }
 
-        public SmartUdpClient(int port) : base(port)
+        public SmartUdpClient(int port)// : base(port)
         {
+            Client = new UdpClient(port);
             Init();
         }
 
-        public SmartUdpClient(IPEndPoint localEP) : base(localEP)
+        public SmartUdpClient(IPEndPoint localEP)// : base(localEP)
         {
+            Client = new UdpClient(localEP);
             Init();
         }
 
-        public SmartUdpClient(int port, AddressFamily family) : base(port, family)
+        public SmartUdpClient(int port, AddressFamily family)// : base(port, family)
         {
+            Client = new UdpClient(port, family);
             Init();
         }
 
-        public SmartUdpClient(string hostname, int port) : base(hostname, port)
+        public SmartUdpClient(string hostname, int port)// : base(hostname, port)
         {
+            Client = new UdpClient(hostname, port);
             Init();
         }
 
@@ -58,11 +69,12 @@ namespace PSIApp
 
         #endregion Construction
 
+
         public event DataReceivedEventHandler DataReceived;
 
         private void OnPoolingElapsed(object sender, System.Timers.ElapsedEventArgs e)
         {
-            if(Available > 0)
+            if(Client.Available > 0)
             {
                 OnDataReceived();
             }
@@ -84,17 +96,59 @@ namespace PSIApp
         protected virtual void OnDataReceived()
         {
             IPEndPoint sender = default(IPEndPoint);
-            byte[] msg = Receive(ref sender);
+            byte[] msg = Client.Receive(ref sender);
 
             DataReceived?.Invoke(this, new DataReceivedEventArgs() {Data = msg, EndPoint = sender });
         }
 
-        protected override void Dispose(bool disposing)
+        public virtual void Connect(IPEndPoint host)
+        {
+            Client.Connect(host);
+        }
+
+        public virtual void Send(byte[] data, int count)
+        {
+            data = MessageErrorGenerator.ProccessMessage(data, ErrorRate, DropRate);
+
+            if (data == null) return;
+
+            Client.Send(data, count);
+        }
+
+        public virtual void Send(byte[] data, int count, IPEndPoint host)
+        {
+            data = MessageErrorGenerator.ProccessMessage(data, ErrorRate, DropRate);
+
+            if (data == null) return;
+
+            Client.Send(data, count, host);
+        }
+
+        public virtual void Send(byte[] data, int count, string host, int port)
+        {
+            data = MessageErrorGenerator.ProccessMessage(data, ErrorRate, DropRate);
+
+            if (data == null) return;
+
+            Client.Send(data, count, host, port);
+        }
+
+        public void Dispose()
         {
             PoolingTimer.Stop();
             PoolingTimer.Dispose();
-            base.Dispose(disposing);
+
+            Client.Dispose();
+
+            Mutex.Dispose();
         }
+
+        //protected override void Dispose(bool disposing)
+        //{
+        //    PoolingTimer.Stop();
+        //    PoolingTimer.Dispose();
+        //    base.Dispose(disposing);
+        //}
     }
 
     public delegate void DataReceivedEventHandler(object sender, DataReceivedEventArgs e);

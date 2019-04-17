@@ -19,7 +19,6 @@ namespace PSIApp
         public const uint DefaultPacketCount = 32;
         public const long HandshakeTimeout = 2000;
 
-
         private SmartUdpClient _client;
         private IPEndPoint _target;
         private int _port;
@@ -362,6 +361,9 @@ namespace PSIApp
             bool break_cycle;
 
             WriteStatus(DeliveredPacketCount, pack_cnt, false);
+
+            Client.ErrorRate = 0.1;
+            Client.DropRate = 0.1;
 
             using (BinaryReader reader = new BinaryReader(File.Open(path, FileMode.Open, FileAccess.Read)))
             {

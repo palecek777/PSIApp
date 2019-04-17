@@ -25,7 +25,8 @@ namespace PSIApp
 
         static void Main(string[] args)
         {
-            file_sender = new UdpFileSender();
+            Console.WriteLine("Welcome to PSI File Sender Program");
+            //file_sender = new UdpFileSender();
             //file_sender.Port = ListeningPort;
 
             // get IPAddress and port
@@ -59,6 +60,8 @@ namespace PSIApp
             file_sender.MaxPackets = pck_count;
             file_sender.Port = ListeningPort;
             file_sender.Target = target_endpoint;
+
+            //file_sender.Client.ErrorRate = 0.5;
 
             Console.Write("Enter filename [test_img.png]: ");
 

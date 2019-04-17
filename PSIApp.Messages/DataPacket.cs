@@ -15,7 +15,7 @@ namespace PSIApp
         public const int MiscLength = DataOffset + sizeof(uint);
 
         // v ms
-        const double TimeoutInterval = 10000;
+        const double TimeoutInterval = 3000;
 
         // poradove cislo packetu
         public uint Number { get; set; }

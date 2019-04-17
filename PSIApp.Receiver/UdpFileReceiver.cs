@@ -169,6 +169,9 @@ namespace PSIApp
                 Console.WriteLine($"Receiving file '{fn}', total of {TotalPacketCount} packets.");
                 WriteStatus(0, TotalPacketCount, false);
                 Client.Send(e.Data, e.Data.Length);
+
+                Client.ErrorRate = 0.1;
+                Client.DropRate = 0.1;
             }
 
             if (IsTransfering && MessageConstructor.IsFileEnd(e.Data))
@@ -219,37 +222,7 @@ namespace PSIApp
         private void ReceivePacket(DataPacket packet)
         {
             ////je to packet, ktery ocekavam
-            //if (packet.Number == aw_packet)// && !(aw_packet > total_packet_count))
-            //{
-            //    WriteData(packet);
-            //    //WriteStatus(packet.Number, total_packet_count);
-            //    aw_packet++;
-
-            //    while (received_packets.Count > 0 && received_packets.Keys.Contains(aw_packet))
-            //    {
-            //        WriteData(received_packets[aw_packet]);
-            //        received_packets.Remove(aw_packet);
-            //        aw_packet++;
-            //    }
-            //}
-            ////je to packet, ktery nyni necekam, dam si ho do ordered listu
-            //else
-            //{
-            //    received_packets[packet.Number] = packet;
-            //}
-
-            ////if (packet.Number < total_packet_count)
-            ////    _packets[packet.Number] = packet;
-
-            //try
-            //{
-            //    _packets[packet.Number] = packet;
-            //}
-            //catch
-            //{
-            //    Console.WriteLine("Invalid packet number");
-            //}
-
+            ///
             if (ReceivedPackets[packet.Number] is null)
             {
                 ReceivedPackets[packet.Number] = packet;

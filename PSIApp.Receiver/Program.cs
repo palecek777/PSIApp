@@ -28,6 +28,8 @@ namespace PSIApp.Receiver
 
         static void Main(string[] args)
         {
+            Console.WriteLine("Welcome to PSI File Receiver Program");
+
             //Get info:
             Console.Write($"Entry listening port [{ListeningPort}]: ");
             string port_string = Console.ReadLine();
