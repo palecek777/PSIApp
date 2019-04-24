@@ -51,7 +51,11 @@ namespace PSIApp.Receiver
             Console.Write($"Desired Packet Count [{UdpFileReceiver.DefaultPacketCount}]: ");
             string pck_count_str = Console.ReadLine();
             receiver.MaxPackets = string.IsNullOrEmpty(pck_count_str) ? UdpFileReceiver.DefaultPacketCount : Convert.ToUInt32(pck_count_str);
-            
+
+
+            Console.Write($"Desired Speed (Bps) [{UdpFileReceiver.DefaultSpeed}]: ");
+            string speed_str = Console.ReadLine();
+            receiver.MaxSpeed = string.IsNullOrEmpty(speed_str) ? UdpFileReceiver.DefaultSpeed : Convert.ToUInt32(speed_str);
 
             Console.WriteLine("Waiting for connection");
             while(!receiver.IsConnected)

@@ -11,8 +11,11 @@ namespace PSIApp
 {
     public class UdpFileReceiver
     {
+        public uint MaxSpeed { get; set; }
+
         public const uint DefaultPacketLength = 2048;
         public const uint DefaultPacketCount = 128;
+        public const uint DefaultSpeed = 1000;
 
         private SmartUdpClient _client;
         private IPEndPoint _target;
@@ -170,8 +173,8 @@ namespace PSIApp
                 WriteStatus(0, TotalPacketCount, false);
                 Client.Send(e.Data, e.Data.Length);
 
-                Client.ErrorRate = 0.1;
-                Client.DropRate = 0.1;
+                //Client.ErrorRate = 0.001;
+                //Client.DropRate = 0.01;
             }
 
             if (IsTransfering && MessageConstructor.IsFileEnd(e.Data))
@@ -207,7 +210,7 @@ namespace PSIApp
             _stop_and_wait = MaxPackets == 1;
             
 
-            byte[] message = MessageConstructor.GetHandshake(MaxPacketLength, MaxPackets);
+            byte[] message = MessageConstructor.GetHandshake(MaxPacketLength, MaxPackets, MaxSpeed);
             Client.Connect(ip);
             Client.Send(message, message.Length);
 
@@ -226,13 +229,13 @@ namespace PSIApp
             if (ReceivedPackets[packet.Number] is null)
             {
                 ReceivedPackets[packet.Number] = packet;
+                UpdateAwaitedNum();
             }
             else
             {
-                return;
+                //return;
             }
 
-            UpdateAwaitedNum();
 
             WriteStatus(AwaitedPacketNum, TotalPacketCount);
 

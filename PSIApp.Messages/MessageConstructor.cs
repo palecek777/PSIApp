@@ -56,11 +56,12 @@ namespace PSIApp
             //return (rec ^ crc) == 0;
         }
 
-        public static byte[] GetHandshake(uint packet_length, uint packet_count)
+        public static byte[] GetHandshake(uint packet_length, uint packet_count, uint speed)
         {
             byte[] message = new byte[1 +               // msg type         - byte (char)
                                       sizeof(uint) +     // packet length    - int
                                       sizeof(uint) +     // max packet count - int
+                                      sizeof(uint) +
                                       sizeof(uint)      // CRC              - uint
                                       ];
 
@@ -70,7 +71,8 @@ namespace PSIApp
 
             BitConverter.GetBytes(packet_length).CopyTo(message, 1);
             BitConverter.GetBytes(packet_count).CopyTo(message, 1 + sizeof(uint));
-            BitConverter.GetBytes(ComputeCrc(message)).CopyTo(message, 1 + sizeof(uint) + sizeof(uint));
+            BitConverter.GetBytes(speed).CopyTo(message, 1 + sizeof(uint) + sizeof(uint));
+            BitConverter.GetBytes(ComputeCrc(message)).CopyTo(message, 1 + sizeof(uint) + sizeof(uint) + sizeof(uint));
 
             return message;
         }
